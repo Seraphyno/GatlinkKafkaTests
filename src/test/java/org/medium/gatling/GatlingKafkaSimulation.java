@@ -1,6 +1,5 @@
 package org.medium.gatling;
 
-import io.gatling.javaapi.core.ChainBuilder;
 import io.gatling.javaapi.core.Simulation;
 import org.apache.kafka.common.serialization.Serde;
 import org.galaxio.gatling.kafka.javaapi.request.expressions.ExpressionBuilder;
@@ -10,7 +9,6 @@ import org.medium.gatling.model.QueueMessageSerde;
 
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -57,19 +55,12 @@ public class GatlingKafkaSimulation extends Simulation {
         return Stream.generate(() -> Map.of("id", (Object) UUID.randomUUID().toString())).iterator();
     }
 
-    /**
-     * Generates a QueueMessage object based on the session variable "id", each message will have a unique ID
-     */
     private ExpressionBuilder<QueueMessage> generateQueueMessage() {
         return new ExpressionBuilder<>(
-                session -> {
-                    String id = Objects.requireNonNull(session.get("id"));
-                    return new QueueMessage(
-                            UUID.fromString(id),
-                            "Hello, Kafka!",
-                            false
-                    );
-                },
+                session -> new QueueMessage(
+                        "Hello, Kafka!",
+                        false
+                ),
                 QueueMessage.class,
                 QUEUE_MESSAGE_SERDE
         ) {};
@@ -77,7 +68,7 @@ public class GatlingKafkaSimulation extends Simulation {
 
     /**
      * Verifies that the message has been processed by transforming the consumer topic message to our QueueMessage,
-     * checking if the ID matches and isProcessed is true
+     * checking if it was processed.
      */
     private static boolean verifyMessageWasProcessed(KafkaProtocolMessage kafkaMessage) {
         // Deserialize the message value to QueueMessage
@@ -86,11 +77,6 @@ public class GatlingKafkaSimulation extends Simulation {
                 kafkaMessage.value()
         );
 
-        // Extract the expected ID from the key
-        String expectedId = new String(kafkaMessage.key());
-        // Check if IDs match and isCompleted is true
-        return message != null
-                && message.id().toString().equals(expectedId)
-                && message.isProcessed();
+        return message != null && message.isProcessed();
     }
 }
