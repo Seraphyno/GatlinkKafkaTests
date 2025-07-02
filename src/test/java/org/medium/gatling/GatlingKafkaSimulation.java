@@ -12,9 +12,13 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static io.gatling.javaapi.core.CoreDsl.constantConcurrentUsers;
 import static io.gatling.javaapi.core.CoreDsl.feed;
+import static io.gatling.javaapi.core.CoreDsl.holdFor;
+import static io.gatling.javaapi.core.CoreDsl.jumpToRps;
+import static io.gatling.javaapi.core.CoreDsl.reachRps;
 import static io.gatling.javaapi.core.CoreDsl.scenario;
-import static io.gatling.javaapi.core.OpenInjectionStep.atOnceUsers;
+import static java.time.Duration.ofSeconds;
 import static org.galaxio.gatling.kafka.javaapi.KafkaDsl.kafka;
 import static org.galaxio.gatling.kafka.javaapi.KafkaDsl.simpleCheck;
 import static org.medium.gatling.configuration.GatlingConfiguration.CONSUMER_TOPIC;
@@ -32,22 +36,28 @@ public class GatlingKafkaSimulation extends Simulation {
 
     {
         setUp(
-            scenario("Kafka interaction scenario")
-                .exec(feed(queueMessageIdFeeder())
-                    .exec(
-                        kafka("Send message")
-                                .requestReply()
-                                .requestTopic(PRODUCER_TOPIC)
-                                .replyTopic(CONSUMER_TOPIC)
-                                .send("#{id}",
-                                        generateQueueMessage()
+                scenario("Send and receive messages to/from Kafka")
+                        .exec(feed(queueMessageIdFeeder())
+                                .exec(
+                                        kafka("SendAndReceiveMessages")
+                                                .requestReply()
+                                                .requestTopic(PRODUCER_TOPIC)
+                                                .replyTopic(CONSUMER_TOPIC)
+                                                .send("#{id}",
+                                                        generateQueueMessage()
+                                                )
+                                                .check(simpleCheck(GatlingKafkaSimulation::verifyMessageWasProcessed))
+                                                .toChainBuilder()
                                 )
-                                .check(simpleCheck(GatlingKafkaSimulation::verifyMessageWasProcessed))
-                                .toChainBuilder()
-                    )
-                )
-                .injectOpen(atOnceUsers(10))
-        ).protocols(KAFKA_PROTOCOL_BUILDER);
+                        )
+                        .injectClosed(constantConcurrentUsers(10).during(30))
+        )
+                .protocols(KAFKA_PROTOCOL_BUILDER)
+                .throttle(
+                        jumpToRps(1), holdFor(ofSeconds(5)),
+                        reachRps(50).during(ofSeconds(15)),
+                        holdFor(30)
+                );
     }
 
     // We want to generate unique IDs for each message sent to Kafka
@@ -63,7 +73,8 @@ public class GatlingKafkaSimulation extends Simulation {
                 ),
                 QueueMessage.class,
                 QUEUE_MESSAGE_SERDE
-        ) {};
+        ) {
+        };
     }
 
     /**
