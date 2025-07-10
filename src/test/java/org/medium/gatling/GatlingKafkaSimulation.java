@@ -2,6 +2,7 @@ package org.medium.gatling;
 
 import io.gatling.javaapi.core.Simulation;
 import org.apache.kafka.common.serialization.Serde;
+import org.apache.kafka.common.serialization.Serdes;
 import org.galaxio.gatling.kafka.javaapi.request.expressions.ExpressionBuilder;
 import org.galaxio.gatling.kafka.request.KafkaProtocolMessage;
 import org.medium.gatling.model.QueueMessage;
@@ -43,9 +44,7 @@ public class GatlingKafkaSimulation extends Simulation {
                                                 .requestReply()
                                                 .requestTopic(PRODUCER_TOPIC)
                                                 .replyTopic(CONSUMER_TOPIC)
-                                                .send("#{id}",
-                                                        generateQueueMessage()
-                                                )
+                                                .send(generateUniqueId(), generateQueueMessage())
                                                 .check(simpleCheck(GatlingKafkaSimulation::verifyMessageWasProcessed))
                                                 .toChainBuilder()
                                 )
@@ -58,6 +57,15 @@ public class GatlingKafkaSimulation extends Simulation {
                         reachRps(50).during(ofSeconds(15)),
                         holdFor(30)
                 );
+    }
+
+    private ExpressionBuilder<String> generateUniqueId() {
+        return new ExpressionBuilder<>(
+                session -> "request_" + session.get("id"),
+                String.class,
+                Serdes.String()
+        ) {
+        };
     }
 
     // We want to generate unique IDs for each message sent to Kafka

@@ -35,5 +35,11 @@ public final class GatlingConfiguration {
                             "group.id", "gatling-consumer-group"
                     )
             )
-            .withDefaultTimeout();
+            .withDefaultTimeout()
+            .matchByMessage(message -> {
+                String key = new String(message.key());
+                String[] parts = key.split("_");
+                if (parts.length < 2) return new byte[0];
+                return parts[1].trim().getBytes();
+            });
 }
